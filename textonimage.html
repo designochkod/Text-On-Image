@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Text On Image</title>
+<style>
+    :root{--bg:#0b1220;--panel:#0f1a33;--card:#101f3e;--txt:#e8eefc;--mut:#a8b3d6;--accent:#5dd6ff;--line:rgba(255,255,255,.12)}
+     *{box-sizing:border-box}
+     body{margin:0;font-family:system-ui,Arial,sans-serif;background:linear-gradient(180deg,#070c18,#0b1220);color:var(--txt)}
+     .app{display:grid;grid-template-columns:340px 1fr;min-height:100vh}
+     .panel{background:rgba(15,26,51,.92);border-right:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:12px}
+     .title{font-weight:800;letter-spacing:.2px}
+     .card{background:rgba(16,31,62,.75);border:1px solid var(--line);border-radius:12px;padding:12px}
+     .row{display:flex;gap:10px;align-items:center}
+     .col{display:flex;flex-direction:column;gap:8px}
+     label{font-size:12px;color:var(--mut)}
+     input[type="text"],input[type="number"],select,textarea{width:100%;border:1px solid var(--line);background:rgba(7,12,24,.35);color:var(--txt);border-radius:10px;padding:10px 10px;outline:none}
+     textarea{resize:none;min-height:40px}
+     input[type="color"]{width:46px;height:34px;border:1px solid var(--line);background:rgba(7,12,24,.35);border-radius:10px;padding:0}
+     input[type="range"]{width:100%}
+     button{border:1px solid var(--line);background:rgba(93,214,255,.12);color:var(--txt);border-radius:10px;padding:10px 12px;font-weight:700;cursor:pointer}
+     button:hover{background:rgba(93,214,255,.18)}
+     button:disabled{opacity:.55;cursor:not-allowed}
+     .hint{font-size:12px;color:var(--mut);line-height:1.35}
+     .list{display:flex;flex-direction:column;gap:8px}
+     .tag{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--line);background:rgba(7,12,24,.25);border-radius:10px}
+     .tag .meta{display:flex;flex-direction:column;gap:2px;min-width:0}
+     .tag .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:800}
+     .tag .sub{font-size:12px;color:var(--mut)}
+     .tag .actions{display:flex;gap:8px}
+     .tag button{padding:8px 10px;font-weight:800;background:rgba(7,12,24,.25)}
+     .tag button.danger{background:rgba(255,90,90,.12)}
+     .tag button.danger:hover{background:rgba(255,90,90,.18)}
+     .topBar{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);background:rgba(7,12,24,.20)}
+     .previewWrap{padding:16px;display:flex;justify-content:center;align-items:flex-start}
+     .previewCard{width:min(900px,100%);background:rgba(15,26,51,.35);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+
+     .drop{position:relative;display:flex;justify-content:center;align-items:flex-start;min-height:520px;background:radial-gradient(900px 600px at 50% 20%, rgba(93,214,255,.12), transparent 55%),rgba(7,12,24,.18);overflow:hidden}
+     .dropArea{position:absolute;inset:0;border-radius:0}
+
+     canvas{position:absolute;top:0;left:0;width:100%;height:auto}
+     .textLayer{position:absolute;top:0;left:0;pointer-events:none;width:100%;height:auto}
+
+     .textItem{position:absolute;pointer-events:auto;user-select:none;cursor:grab;transform:translateY(-50%)}
+     .textItem[data-active="1"]{outline:2px solid rgba(93,214,255,.9);outline-offset:2px;border-radius:8px;padding:2px}
+     .textItem:active{cursor:grabbing}
+
+     .textItem .bubble{display:inline-block;white-space:pre-wrap;word-break:break-word;color:transparent !important}
+
+     .textItem[data-align="left"]{transform:translateY(-50%)}
+     .textItem[data-align="center"]{transform:translate(-50%,-50%)}
+     .textItem[data-align="right"]{transform:translate(-100%,-50%)}
+
+     .footerRow{padding:12px 14px;display:flex;gap:10px;align-items:center;justify-content:flex-end;border-top:1px solid var(--line);background:rgba(7,12,24,.20)}
+     .fileRow{display:flex;gap:10px}
+     .small{padding:8px 10px}
+     .grow{flex:1}
+     .warn{color:#ffb4b4}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <div class="title">Text On Image</div>
+
+    <div class="card col">
+      <div class="hint">1) Ladda upp bild<br/>2) Lägg till en text och dra den på bilden<br/>3) Markera en text och ändra färg/justering</div>
+
+      <div class="fileRow">
+        <label for="fileInput" class="grow">
+          <input id="fileInput" type="file" accept="image/png,image/jpeg" hidden />
+          <button id="uploadBtn" class="small" style="width:100%">Ladda bild</button>
+        </label>
+		<button id="addOverlayBtn" disabled>Lägg till bild</button>
+      </div>
+    </div>
+
+    <div class="card col">
+      <label for="textInput">Ny text (lägg till)</label>
+      <textarea id="textInput" placeholder="Skriv text här"></textarea>
+
+      <div class="row">
+        <div class="col grow">
+          <label for="colorInput">Färg</label>
+          <div class="row" style="gap:12px">
+            <input id="colorInput" type="color" value="#ffffff" />
+            <label id="activeMeta" class="hint" style="margin:0;white-space:nowrap"></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col grow">
+          <label for="alignSelect">Justering</label>
+          <select id="alignSelect">
+            <option value="left">Vänster</option>
+            <option value="center" selected>Centrum</option>
+            <option value="right">Höger</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col grow">
+          <label for="sizeInput">Storlek: <span id="sizeVal">40</span> px</label>
+          <input id="sizeInput" type="range" min="12" max="160" value="40" />
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="addTextBtn" class="grow" disabled>Lägg till text</button>
+      </div>
+
+      <div class="row">
+        <button id="clearTextsBtn" class="grow" disabled>Rensa texter</button>
+      </div>
+    </div>
+
+    <div class="card col">
+      <div class="hint">Texter</div>
+      <div id="textList" class="list"></div>
+    </div>
+
+    <div class="card col">
+      <div class="row">
+        <div class="col grow">
+          <label for="nameInput">Filnamn (utan ändelse)</label>
+          <input id="nameInput" type="text" placeholder="min-bild" value="min-bild" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col grow">
+          <label for="typeSelect">Format</label>
+          <select id="typeSelect">
+            <option value="image/png">PNG</option>
+            <option value="image/jpeg">JPG</option>
+          </select>
+        </div>
+        <div class="col" style="width:130px">
+          <label for="qualityInput">Kvalitet (JPG)</label>
+          <input id="qualityInput" type="number" min="0.1" max="1" step="0.1" value="0.92" />
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="downloadBtn" class="grow" disabled>Ladda ner</button>
+      </div>
+
+      <div id="status" class="hint warn" style="min-height:16px"></div>
+    </div>
+  </aside>
+
+  <main class="previewWrap">
+    <div class="previewCard">
+      <div class="topBar">
+        <div class="hint" style="margin:0">Dra en text för att flytta den. Klicka en text för att markera.</div>
+        <div class="hint" style="margin:0" id="imgMeta">Ingen bild vald</div>
+      </div>
+
+      <div id="drop" class="drop" data-empty="1">
+        <div id="dropArea" class="dropArea" aria-label="Släpp bild här"></div>
+        <canvas id="canvas"></canvas>
+        <div id="textLayer" class="textLayer"></div>
+      </div>
+
+      <div class="footerRow">
+        <button id="reRenderBtn" class="small">Uppdatera preview</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+	(() => {
+		  const $ = (id) => document.getElementById(id);
+		  const fileInput = $('fileInput');
+		  const uploadBtn = $('uploadBtn');
+		  const addOverlayBtn = $('addOverlayBtn');
+		  const drop = $('drop');
+		  const dropArea = $('dropArea');
+		  const canvas = $('canvas');
+		  const ctx = canvas.getContext('2d', { alpha: false });
+		  const textLayer = $('textLayer');
+		  const textInput = $('textInput');
+		  const colorInput = $('colorInput');
+		  const sizeInput = $('sizeInput');
+		  const sizeVal = $('sizeVal');
+		  const activeMeta = $('activeMeta');
+		  const alignSelect = $('alignSelect');
+		  const addTextBtn = $('addTextBtn');
+		  const clearTextsBtn = $('clearTextsBtn');
+		  const textList = $('textList');
+		  const downloadBtn = $('downloadBtn');
+		  const typeSelect = $('typeSelect');
+		  const nameInput = $('nameInput');
+		  const qualityInput = $('qualityInput');
+		  const status = $('status');
+		  const imgMeta = $('imgMeta');
+		  const reRenderBtn = $('reRenderBtn');
+
+		  let img = null;
+		  let imgUrl = null;
+
+		  const state = { items: [], activeId: null, draggingId: null, dragOffsetX: 0, dragOffsetY: 0 };
+
+		  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+		  const setStatus = (msg) => { status.textContent = msg || ''; };
+		  const sanitizeText = (s) => String(s ?? '').replace(/\u0000/g, '').slice(0, 140);
+		  const uid = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
+		  const getActive = () => state.items.find(t => t.id === state.activeId) || null;
+
+		  const syncTextLayerToCanvasSize = () => {
+		    const rect = canvas.getBoundingClientRect();
+		    if (!rect.width || !rect.height) return;
+		    textLayer.style.width = rect.width + 'px';
+		    textLayer.style.height = rect.height + 'px';
+		  };
+
+		  const drawBase = () => {
+		    if (!img) return;
+		    ctx.save();
+		    ctx.clearRect(0, 0, canvas.width, canvas.height);
+		    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+		    for (const item of state.items) {
+		      if (item.type === 'image') {
+		        ctx.drawImage(item.img, item.x - item.width / 2, item.y - item.height / 2, item.width, item.height);
+		      }
+		    }
+		    ctx.restore();
+		  };
+
+		  const drawWrappedLines = (t) => {
+		    const lines = t.text.split('\n');
+		    const lineHeight = Math.round(t.size * 1.15);
+		    ctx.font = `${t.size}px system-ui, Arial, sans-serif`;
+		    ctx.fillStyle = t.color;
+		    ctx.textBaseline = 'middle';
+		    ctx.textAlign = t.align;
+
+		    const totalH = (lines.length - 1) * lineHeight;
+		    const startY = t.y - totalH / 2;
+
+		    for (let i = 0; i < lines.length; i++) {
+		      ctx.fillText(lines[i], t.x, startY + i * lineHeight);
+		    }
+		  };
+
+		  const rerenderTextsToCanvas = () => {
+		    if (!img) return;
+		    drawBase();
+		    for (const item of state.items) {
+		      if (item.type === 'text') {
+		        ctx.save();
+		        drawWrappedLines(item);
+		        ctx.restore();
+		      }
+		    }
+		  };
+		  const rerenderTextsToLayer = () => {
+		    textLayer.innerHTML = '';
+		    const rect = canvas.getBoundingClientRect();
+		    const sx = rect.width / canvas.width;
+		    const sy = rect.height / canvas.height;
+
+		    for (const item of state.items) {
+		      const el = document.createElement('div');
+		      el.className = 'textItem';
+		      el.dataset.id = item.id;
+		      el.dataset.active = String(item.id === state.activeId);
+		      el.style.left = (item.x * sx) + 'px';
+		      el.style.top = (item.y * sy) + 'px';
+
+		      if (item.type === 'text') {
+		        el.dataset.align = item.align;
+		        const bubble = document.createElement('div');
+		        bubble.className = 'bubble';
+		        bubble.style.color = item.color;
+		        bubble.style.fontSize = (item.size * sy) + 'px';
+		        bubble.style.fontFamily = 'system-ui, Arial, sans-serif';
+		        bubble.style.textAlign = item.align;
+		        bubble.textContent = item.text;
+		        el.appendChild(bubble);
+		      } else if (item.type === 'image') {
+		        el.dataset.align = 'center';
+		        const placeholder = document.createElement('div');
+		        placeholder.style.width = (item.width * sx) + 'px';
+		        placeholder.style.height = (item.height * sy) + 'px';
+		        placeholder.style.transform = 'translate(-50%, -50%)';
+		        placeholder.style.border = '1px dashed transparent';
+		        el.appendChild(placeholder);
+		      }
+
+		      el.addEventListener('pointerdown', (e) => {
+		        e.preventDefault();
+		        e.stopPropagation();
+		        state.activeId = item.id;
+		        state.draggingId = item.id;
+		        const p = canvasPointFromEvent(e);
+		        state.dragOffsetX = p.x - item.x;
+		        state.dragOffsetY = p.y - item.y;
+		        syncActiveMeta();
+		        syncActiveStyles();
+		        renderTextList();
+		        el.setPointerCapture(e.pointerId);
+		      });
+
+		      textLayer.appendChild(el);
+		    }
+		  };
+
+		  const syncActiveStyles = () => {
+		    [...textLayer.querySelectorAll('.textItem')].forEach(el => {
+		      const id = el.dataset.id;
+		      el.dataset.active = String(id === state.activeId);
+		    });
+		  };
+
+		  const syncActiveMeta = () => {
+		    const a = getActive();
+		    activeMeta.innerHTML = '';
+		    if (!a) {
+		      activeMeta.textContent = state.items.length ? 'Ingen vald' : '';
+		      return;
+		    }
+		    if (a.type === 'text') {
+		      activeMeta.textContent = `Markerad • ${a.align} • ${a.size}px`;
+		    } else if (a.type === 'image') {
+		      const label = document.createElement('span');
+		      label.textContent = `Bildstorlek: ${Math.round(a.scale * 100)}% `;
+	      
+		      const slider = document.createElement('input');
+		      slider.type = 'range';
+		      slider.min = '10';
+		      slider.max = '200';
+		      slider.value = String(Math.round(a.scale * 100));
+		      slider.style.width = '100px';
+		      slider.style.verticalAlign = 'middle';
+	      
+		      slider.addEventListener('input', () => {
+		        const pct = Number(slider.value) || 10;
+		        a.scale = pct / 100;
+		        a.width = a.origW * a.scale;
+		        a.height = a.origH * a.scale;
+		        label.textContent = `Bildstorlek: ${pct}% `;
+		        rerenderTextsToLayer();
+		        rerenderTextsToCanvas();
+		      });
+	      
+		      activeMeta.appendChild(label);
+		      activeMeta.appendChild(slider);
+		    }
+		  };
+
+		  const updateUIStates = () => {
+		    const hasImg = !!img;
+		    const textOk = sanitizeText(textInput.value).trim().length > 0;
+		    addTextBtn.disabled = !hasImg || !textOk;
+		    addOverlayBtn.disabled = !hasImg;
+		    clearTextsBtn.disabled = !hasImg || state.items.length === 0;
+		    downloadBtn.disabled = !hasImg || !state.items.some(x => x.type === 'text');
+		    reRenderBtn.disabled = !hasImg;
+		  };
+		  const parseDropFile = (file) => {
+		    if (!file) return;
+		    if (!/^image\/(png|jpeg)$/.test(file.type) && !/\.(png|jpe?g)$/i.test(file.name)) {
+		      setStatus('Ogiltig filtyp. Välj PNG eller JPG/JPEG.');
+		      return;
+		    }
+		    setStatus('');
+		    if (imgUrl) URL.revokeObjectURL(imgUrl);
+		    imgUrl = URL.createObjectURL(file);
+
+		    const i = new Image();
+		    i.onload = () => {
+		      img = i;
+		      state.items = [];
+		      resizeToImage();
+		      drop.dataset.empty = '0';
+		      imgMeta.textContent = `${file.name} • ${i.naturalWidth}×${i.naturalHeight}`;
+		      updateUIStates();
+		    };
+		    i.onerror = () => setStatus('Kunde inte läsa bilden.');
+		    i.src = imgUrl;
+		  };
+
+		  const resizeToImage = () => {
+		    if (!img) return;
+		    const w = img.naturalWidth || img.width;
+		    const h = img.naturalHeight || img.height;
+
+		    canvas.width = w;
+		    canvas.height = h;
+
+		    syncTextLayerToCanvasSize();
+
+		    rerenderTextsToCanvas();
+		    rerenderTextsToLayer();
+		    updateUIStates();
+		    syncActiveMeta();
+		  };
+
+		  const canvasPointFromEvent = (e) => {
+		    const rect = canvas.getBoundingClientRect();
+		    const xCss = e.clientX - rect.left;
+		    const yCss = e.clientY - rect.top;
+
+		    const sx = canvas.width / rect.width;
+		    const sy = canvas.height / rect.height;
+
+		    return { x: xCss * sx, y: yCss * sy };
+		  };
+
+		  const onPointerMove = (e) => {
+		    if (!state.draggingId) return;
+		    const item = state.items.find(x => x.id === state.draggingId);
+		    if (!item) return;
+
+		    const p = canvasPointFromEvent(e);
+		    let targetX = p.x - state.dragOffsetX;
+		    let targetY = p.y - state.dragOffsetY;
+
+		    const midX = canvas.width / 2;
+		    const midY = canvas.height / 2;
+		    const snapThreshold = 5;
+
+		    let snappedX = false;
+		    let snappedY = false;
+
+		    if (Math.abs(targetX - midX) < snapThreshold) {
+		      targetX = midX;
+		      snappedX = true;
+		    }
+		    if (Math.abs(targetY - midY) < snapThreshold) {
+		      targetY = midY;
+		      snappedY = true;
+		    }
+
+		    item.x = clamp(targetX, 0, canvas.width - 1);
+		    item.y = clamp(targetY, 0, canvas.height - 1);
+
+		    rerenderTextsToLayer();
+		    rerenderTextsToCanvas();
+
+		    if (snappedX || snappedY) {
+		      ctx.save();
+		      ctx.lineWidth = 2;
+		      ctx.strokeStyle = '#5dd6ff';
+		      ctx.setLineDash([6, 6]);
+
+		      if (snappedX) {
+		        ctx.beginPath();
+		        ctx.moveTo(midX, 0);
+		        ctx.lineTo(midX, canvas.height);
+		        ctx.stroke();
+		      }
+		      if (snappedY) {
+		        ctx.beginPath();
+		        ctx.moveTo(0, midY);
+		        ctx.lineTo(canvas.width, midY);
+		        ctx.stroke();
+		      }
+		      ctx.restore();
+		    }
+		  };
+
+		  const onPointerUp = () => {
+		    if (state.draggingId) {
+		      state.draggingId = null;
+		      state.dragOffsetX = 0;
+		      state.dragOffsetY = 0;
+		      rerenderTextsToCanvas();
+		    }
+		  };
+		  const onKeyDown = (e) => {
+		    const item = getActive();
+		    if (!item) return;
+		    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+		      if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+		      e.preventDefault();
+		      const step = e.shiftKey ? 10 : 1;
+		      if (e.key === 'ArrowUp') item.y -= step;
+		      if (e.key === 'ArrowDown') item.y += step;
+		      if (e.key === 'ArrowLeft') item.x -= step;
+		      if (e.key === 'ArrowRight') item.x += step;
+		      item.x = clamp(item.x, 0, canvas.width - 1);
+		      item.y = clamp(item.y, 0, canvas.height - 1);
+		      rerenderTextsToLayer();
+		      rerenderTextsToCanvas();
+		      renderTextList();
+		    }
+		  };
+
+		  const addText = () => {
+		    if (!img) return;
+		    const text = sanitizeText(textInput.value).trim();
+		    if (!text) return;
+
+		    const t = {
+		      id: uid(),
+		      type: 'text',
+		      text,
+		      color: colorInput.value,
+		      size: Number(sizeInput.value) || 40,
+		      align: alignSelect.value,
+		      x: canvas.width / 2,
+		      y: canvas.height / 2
+		    };
+
+		    state.items.push(t);
+		    state.activeId = t.id;
+		    syncActiveMeta();
+		    renderTextList();
+		    rerenderTextsToLayer();
+		    rerenderTextsToCanvas();
+		    updateUIStates();
+		  };
+
+		  const renderTextList = () => {
+		    textList.innerHTML = '';
+		    for (const item of state.items) {
+		      const block = document.createElement('div');
+		      block.className = 'tag';
+		      block.dataset.id = item.id;
+
+		      if (item.id === state.activeId) block.style.borderColor = 'rgba(93,214,255,.6)';
+
+		      const meta = document.createElement('div');
+		      meta.className = 'meta';
+
+		      const name = document.createElement('div');
+		      name.className = 'name';
+		      name.textContent = item.type === 'text' ? item.text : 'Bildöverlägg';
+
+		      const sub = document.createElement('div');
+		      sub.className = 'sub';
+		      sub.textContent = item.type === 'text' 
+		        ? `${item.align} • ${Math.round(item.x)}, ${Math.round(item.y)} • ${item.size}px`
+		        : `Bild • ${Math.round(item.x)}, ${Math.round(item.y)} • ${Math.round(item.scale * 100)}%`;
+
+		      meta.appendChild(name);
+		      meta.appendChild(sub);
+
+		      const actions = document.createElement('div');
+		      actions.className = 'actions';
+
+		      const delBtn = document.createElement('button');
+		      delBtn.className = 'small danger';
+		      delBtn.textContent = 'Ta bort';
+		      delBtn.addEventListener('click', (e) => {
+		        e.stopPropagation();
+		        state.items = state.items.filter(x => x.id !== item.id);
+		        if (state.activeId === item.id) state.activeId = state.items[0]?.id || null;
+		        renderTextList();
+		        rerenderTextsToLayer();
+		        rerenderTextsToCanvas();
+		        syncActiveMeta();
+		        updateUIStates();
+		      });
+
+		      block.addEventListener('click', () => {
+		        state.activeId = item.id;
+		        syncActiveMeta();
+		        syncActiveStyles();
+		        renderTextList();
+		      });
+
+		      actions.appendChild(delBtn);
+		      block.appendChild(meta);
+		      block.appendChild(actions);
+		      textList.appendChild(block);
+		    }
+		  };
+
+		  const clearTexts = () => {
+		    state.items = [];
+		    state.activeId = null;
+		    state.draggingId = null;
+		    textLayer.innerHTML = '';
+		    textList.innerHTML = '';
+		    rerenderTextsToCanvas();
+		    syncActiveMeta();
+		    updateUIStates();
+		  };
+
+		  const download = () => {
+		    if (!img) return;
+		    const name = sanitizeText(nameInput.value).trim() || 'bild';
+		    rerenderTextsToCanvas();
+
+		    const type = typeSelect.value;
+		    const quality = clamp(Number(qualityInput.value) || 0.92, 0.1, 1);
+		    const ext = type === 'image/jpeg' ? 'jpg' : 'png';
+		    const dataURL = canvas.toDataURL(type, type === 'image/jpeg' ? quality : undefined);
+
+		    const a = document.createElement('a');
+		    a.href = dataURL;
+		    a.download = `${name}.${ext}`;
+		    document.body.appendChild(a);
+		    a.click();
+		    a.remove();
+		  };
+
+		  const bindDragNDrop = () => {
+		    const onOver = (e) => {
+		      e.preventDefault();
+		      dropArea.style.outline = '2px solid rgba(93,214,255,.85)';
+		    };
+		    const onLeave = () => { dropArea.style.outline = 'none'; };
+		    const onDrop = (e) => {
+		      e.preventDefault();
+		      dropArea.style.outline = 'none';
+		      const f = e.dataTransfer?.files?.[0] || null;
+		      parseDropFile(f);
+		    };
+		    dropArea.addEventListener('dragover', onOver);
+		    dropArea.addEventListener('dragenter', onOver);
+		    dropArea.addEventListener('dragleave', onLeave);
+		    dropArea.addEventListener('drop', onDrop);
+		  };
+
+		  const applyToActive = (patch) => {
+		    const a = getActive();
+		    if (!a || a.type !== 'text') return;
+		    Object.assign(a, patch);
+		    rerenderTextsToLayer();
+		    rerenderTextsToCanvas();
+		    renderTextList();
+		    syncActiveMeta();
+		  };
+
+		  uploadBtn.addEventListener('click', () => fileInput.click());
+		  fileInput.addEventListener('change', () => parseDropFile(fileInput.files?.[0] || null));
+
+		  addOverlayBtn.addEventListener('click', () => {
+		    const input = document.createElement('input');
+		    input.type = 'file';
+		    input.multiple = true;
+		    input.accept = 'image/png, image/jpeg';
+		    input.onchange = () => {
+		      if (!input.files) return;
+		      for (const file of input.files) {
+		        const url = URL.createObjectURL(file);
+		        const oImg = new Image();
+		        oImg.onload = () => {
+		          const w = oImg.naturalWidth || oImg.width;
+		          const h = oImg.naturalHeight || oImg.height;
+		          state.items.push({
+		            id: uid(),
+		            type: 'image',
+		            img: oImg,
+		            x: canvas.width / 2,
+		            y: canvas.height / 2,
+		            origW: w,
+		            origH: h,
+		            width: w,
+		            height: h,
+		            scale: 1
+		          });
+		          rerenderTextsToCanvas();
+		          rerenderTextsToLayer();
+		          updateUIStates();
+		          renderTextList();
+		        };
+		        oImg.src = url;
+		      }
+		    };
+		    input.click();
+		  });
+
+		  textInput.addEventListener('input', () => {
+		    addTextBtn.disabled = !img || sanitizeText(textInput.value).trim().length === 0;
+		    updateUIStates();
+		  });
+
+		  colorInput.addEventListener('input', () => {
+		    applyToActive({ color: colorInput.value });
+		  });
+
+		  sizeInput.addEventListener('input', () => {
+		    sizeVal.textContent = String(sizeInput.value);
+		    applyToActive({ size: Number(sizeInput.value) || 40 });
+		  });
+
+		  alignSelect.addEventListener('change', () => {
+		    applyToActive({ align: alignSelect.value });
+		  });
+
+		  addTextBtn.addEventListener('click', addText);
+		  clearTextsBtn.addEventListener('click', clearTexts);
+		  downloadBtn.addEventListener('click', download);
+
+		  reRenderBtn.addEventListener('click', () => {
+		    if (!img) return;
+		    syncTextLayerToCanvasSize();
+		    rerenderTextsToLayer();
+		    rerenderTextsToCanvas();
+		  });
+
+		  drop.addEventListener('pointerdown', (e) => {
+		    if (e.target === drop || e.target === dropArea) {
+		      state.activeId = null;
+		      syncActiveStyles();
+		      syncActiveMeta();
+		      renderTextList();
+		    }
+		  });
+
+		  drop.addEventListener('pointermove', onPointerMove);
+		  window.addEventListener('pointerup', onPointerUp);
+		  window.addEventListener('pointercancel', onPointerUp);
+		  window.addEventListener('keydown', onKeyDown);
+
+		  window.addEventListener('resize', () => {
+		    if (!img) return;
+		    syncTextLayerToCanvasSize();
+		    rerenderTextsToLayer();
+		    rerenderTextsToCanvas();
+		  });
+
+		  const init = () => {
+		    bindDragNDrop();
+		    sizeVal.textContent = String(sizeInput.value);
+		    activeMeta.textContent = '';
+		    canvas.style.left = '0px';
+		    canvas.style.top = '0px';
+		    textLayer.style.left = '0px';
+		    textLayer.style.top = '0px';
+		    updateUIStates();
+		    renderTextList();
+		  };
+
+		  init();
+		})();
+</script>
+</body>
+</html>
